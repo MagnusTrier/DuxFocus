@@ -11,6 +11,7 @@ typedef enum {
   ICON_MINIMIZE,
   ICON_MAXIMIZE,
   ICON_LOGO,
+  ICON_MINUS,
   ICON_COUNT,
 
 } icon_id_t;
@@ -18,7 +19,6 @@ typedef enum {
 Texture2D *get_icon(icon_id_t id, int target_size, Clay_Color tint,
                     float stroke_width, int supersample);
 
-void icons_system_init(void);
 void icons_system_unload(void);
 
 #endif

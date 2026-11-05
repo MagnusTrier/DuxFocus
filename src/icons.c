@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdint.h>
 #define NANOSVG_IMPLEMENTATION
 #define NANOSVGRAST_IMPLEMENTATION
@@ -10,8 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define HASH_TABLE_SIZE 256
-
 typedef struct {
   icon_id_t id;
   int target_size;
@@ -22,7 +21,13 @@ typedef struct {
   bool occupied;
 } cached_icon;
 
-static cached_icon icon_cache_table[HASH_TABLE_SIZE] = {0};
+typedef struct {
+  size_t length;
+  size_t capacity;
+  cached_icon *cache;
+} icon_cache_table_t;
+
+static icon_cache_table_t icon_cache = {0};
 
 static const char *icon_paths[ICON_COUNT] = {
     [ICON_CLOSE] = "resources/icons/x.svg",
@@ -30,11 +35,13 @@ static const char *icon_paths[ICON_COUNT] = {
     [ICON_MINIMIZE] = "resources/icons/minimize.svg",
     [ICON_MAXIMIZE] = "resources/icons/maximize.svg",
     [ICON_LOGO] = "resources/logo.svg",
+    [ICON_MINUS] = "resources/icons/minus.svg",
     [ICON_DRAFTING_COMPASS] = "resources/icons/drafting-compass.svg",
 };
 
-Texture2D load_svg_icon(const char *path, int target_size, Clay_Color tint,
-                        float stroke_width, int supersample) {
+static Texture2D load_svg_icon(const char *path, int target_size,
+                               Clay_Color tint, float stroke_width,
+                               int supersample) {
   FILE *f = fopen(path, "rb");
   if (!f) {
     fprintf(stderr, "load_svg_icon: failed to open %s\n", path);
@@ -168,19 +175,84 @@ static uint32_t hash_icon_key(icon_id_t id, int target_size, Clay_Color tint,
   return hash;
 }
 
+void icons_system_unload(void) {
+  for (size_t i = 0; i < icon_cache.capacity; ++i) {
+    cached_icon *entry = &icon_cache.cache[i];
+    if (entry->occupied && entry->texture.id != 0) {
+      UnloadTexture(entry->texture);
+    }
+  }
+  free(icon_cache.cache);
+  memset(&icon_cache, 0, sizeof(icon_cache));
+}
+
+cached_icon *insert(cached_icon *cache, size_t capacity, cached_icon *entry) {
+
+  size_t hash = hash_icon_key(entry->id, entry->target_size, entry->tint,
+                              entry->stroke_width, entry->supersample);
+  size_t index = hash & (capacity - 1);
+  for (size_t j = 0; j < capacity; ++j) {
+    if (!cache[index].occupied) {
+      cache[index] = *entry;
+      return &cache[index];
+    } else {
+      index = (index + 1) & (capacity - 1);
+    }
+  }
+  fprintf(stderr, "Icon insertion into cached failed");
+  return NULL;
+}
+
+static void change_capacity(size_t new_capacity) {
+  assert((new_capacity & (new_capacity - 1)) == 0 && new_capacity > 0 &&
+         new_capacity > icon_cache.length);
+
+  cached_icon *new_cache = calloc(new_capacity, sizeof(cached_icon));
+
+  size_t count = 0;
+
+  for (size_t i = 0; i < icon_cache.capacity; ++i) {
+    cached_icon *entry = &icon_cache.cache[i];
+    if (count == icon_cache.length) {
+      break;
+    }
+
+    if (entry->occupied) {
+      ++count;
+      if (!insert(new_cache, new_capacity, entry)) {
+        fprintf(stderr, "change_capacity: rehash insert failed for icon %d\n",
+                entry->id);
+        abort();
+      }
+    }
+  }
+
+  icon_cache.capacity = new_capacity;
+  free(icon_cache.cache);
+  icon_cache.cache = new_cache;
+}
+
+static void initialize_icon_cache_table(void) { change_capacity(256); }
+
 Texture2D *get_icon(icon_id_t id, int target_size, Clay_Color tint,
                     float stroke_width, int supersample) {
-  uint32_t hash =
-      hash_icon_key(id, target_size, tint, stroke_width, supersample);
-  uint32_t index = hash & (HASH_TABLE_SIZE - 1);
+  if (icon_cache.capacity == 0) {
+    initialize_icon_cache_table();
+  }
+  size_t hash = hash_icon_key(id, target_size, tint, stroke_width, supersample);
+  size_t index = hash & (icon_cache.capacity - 1);
 
-  for (int i = 0; i < HASH_TABLE_SIZE; ++i) {
-    cached_icon *entry = &icon_cache_table[index];
+  for (size_t i = 0; i < icon_cache.capacity; ++i) {
+    cached_icon *entry = &icon_cache.cache[index];
 
     if (!entry->occupied) {
       if (id < 0 || id >= ICON_COUNT) {
         fprintf(stderr, "Error: Invalid icon ID %d\n", id);
         return NULL;
+      }
+
+      if (icon_cache.length > icon_cache.capacity * 0.7) {
+        change_capacity(icon_cache.capacity * 2);
       }
 
       Texture2D new_texture = load_svg_icon(icon_paths[id], target_size, tint,
@@ -189,19 +261,25 @@ Texture2D *get_icon(icon_id_t id, int target_size, Clay_Color tint,
         return NULL;
       }
 
-      entry->id = id;
-      entry->target_size = target_size;
-      entry->tint = tint;
-      entry->stroke_width = stroke_width;
-      entry->supersample = supersample;
-      entry->texture = new_texture;
-      entry->occupied = true;
+      cached_icon *new_entry =
+          insert(icon_cache.cache, icon_cache.capacity,
+                 &(cached_icon){.id = id,
+                                .target_size = target_size,
+                                .tint = tint,
+                                .stroke_width = stroke_width,
+                                .texture = new_texture,
+                                .supersample = supersample,
+                                .occupied = true});
 
-      return &entry->texture;
+      if (!new_entry) {
+        UnloadTexture(new_texture);
+        return NULL;
+      }
+
+      ++icon_cache.length;
+      return &new_entry->texture;
     }
 
-    // Fixed: Compare individual fields to avoid struct padding memory
-    // mismatches
     if (entry->id == id && entry->target_size == target_size &&
         entry->tint.r == tint.r && entry->tint.g == tint.g &&
         entry->tint.b == tint.b && entry->tint.a == tint.a &&
@@ -210,18 +288,9 @@ Texture2D *get_icon(icon_id_t id, int target_size, Clay_Color tint,
       return &entry->texture;
     }
 
-    index = (index + 1) & (HASH_TABLE_SIZE - 1);
+    index = (index + 1) & (icon_cache.capacity - 1);
   }
 
   fprintf(stderr, "Error: Icon cache table is full!\n");
   return NULL;
-}
-
-void icons_system_unload(void) {
-  for (int i = 0; i < HASH_TABLE_SIZE; ++i) {
-    if (icon_cache_table[i].occupied && icon_cache_table[i].texture.id != 0) {
-      UnloadTexture(icon_cache_table[i].texture);
-    }
-  }
-  memset(icon_cache_table, 0, sizeof(icon_cache_table));
 }

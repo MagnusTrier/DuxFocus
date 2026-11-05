@@ -2,6 +2,7 @@
 #include <stddef.h>
 #define CLAY_IMPLEMENTATION
 
+#include "api.h"
 #include "app.h"
 #include "clay.h"
 #include "clay_renderer_raylib.c"
@@ -42,11 +43,14 @@ int main(void) {
   void *arena_mem = malloc(arena_size);
   memset(arena_mem, 0, arena_size);
   app_data_t data_top = {.frameArena = {.memory = (intptr_t)arena_mem}};
+
+  api_request_start(&data_top.api_request, "https://httpbin.org/json");
   Clay_SetMeasureTextFunction(Raylib_MeasureText, fonts);
 
   bool exit_requested = false;
 
   while (!WindowShouldClose() && !exit_requested) {
+    api_request_poll(&data_top.api_request);
     Clay_RenderCommandArray render_commands_top =
         create_layout(clay_context_top, &data_top, &exit_requested);
     BeginDrawing();
@@ -55,5 +59,6 @@ int main(void) {
     EndDrawing();
   }
   icons_system_unload();
+  api_request_free(&data_top.api_request);
   Clay_Raylib_Close();
 }

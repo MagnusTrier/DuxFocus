@@ -63,6 +63,7 @@ typedef struct {
   Clay_TextElementConfig text_overrides;
   Clay_CornerRadius *corner_radius;
   Clay_Sizing *sizing;
+  Clay_Sizing *icon_sizing;
   Clay_Color hover_bg;
   button_click_ctx *ctx;
 } button_props;
@@ -70,6 +71,8 @@ typedef struct {
 void button_component(button_props props) {
   Clay_ElementDeclaration config = button_defaults();
   Clay_TextElementConfig text_config = text_defaults();
+
+  bool hovered = Clay_PointerOver(props.id);
 
   if (props.corner_radius) {
     config.cornerRadius = *props.corner_radius;
@@ -79,7 +82,7 @@ void button_component(button_props props) {
     config.layout.sizing = *props.sizing;
   }
 
-  if (props.hover_bg.a > 0 && Clay_PointerOver(props.id)) {
+  if (props.hover_bg.a > 0 && hovered) {
     config.backgroundColor = props.hover_bg;
   }
 
@@ -87,8 +90,6 @@ void button_component(button_props props) {
     text_config.fontId = props.text_overrides.fontId;
     text_config.fontSize = props.text_overrides.fontSize;
   }
-
-  bool hovered = Clay_PointerOver(props.id);
 
   if (hovered) {
     SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
@@ -107,8 +108,8 @@ void button_component(button_props props) {
     }
 
     if (tex && tex->id != 0) {
-      CLAY_AUTO_ID({.layout = {.sizing =
-                                   {
+      CLAY_AUTO_ID({.layout = {.sizing = props.icon_sizing ? *props.icon_sizing :
+                                   (Clay_Sizing){
                                        .width = CLAY_SIZING_FIXED(ICON_SIZE),
                                        .height = CLAY_SIZING_FIXED(ICON_SIZE),
                                    }},
@@ -148,17 +149,16 @@ void title_bar(bool *exit_requested) {
                    .layoutDirection = CLAY_LEFT_TO_RIGHT},
         .border = {.color = COLOR_SURFACE_1, .width = {.bottom = 1}}}) {
 
-    Texture2D *logo = get_icon(ICON_LOGO, 40, COLOR_BASE, 0.0f, 2);
-
     CLAY_AUTO_ID({.layout =
                       {
                           .sizing =
                               {
-                                  .width = CLAY_SIZING_FIXED(34),
-                                  .height = CLAY_SIZING_FIXED(34),
+                                  .width = CLAY_SIZING_FIXED(40),
+                                  .height = CLAY_SIZING_FIXED(40),
                               },
                       },
-                  .image = {.imageData = logo}}) {}
+                  .image = {.imageData = get_icon(ICON_LOGO, 40, COLOR_BASE,
+                                                  0.0f, 2)}}) {}
     CLAY(CLAY_ID("SmallSpacer"),
          {.layout = {.sizing = {.width = CLAY_SIZING_FIXED(8)}}}) {}
     CLAY_TEXT(CLAY_STRING(WINDOW_TITLE), text_defaults());
@@ -168,7 +168,13 @@ void title_bar(bool *exit_requested) {
     static button_click_ctx minimize_ctx = {on_minimize_click, NULL};
     button_component((button_props){
         .id = CLAY_ID("btnMinimize"),
-        .icon = get_icon(ICON_MINIMIZE, 24, COLOR_SURFACE_1, 1.5f, 2),
+        .icon =
+            get_icon(ICON_MINUS, 20,
+                     Clay_PointerOver(CLAY_ID("btnMinimize")) ? COLOR_OVERLAY_2
+                                                              : COLOR_OVERLAY_0,
+                     1.5f, 4),
+        .icon_sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(20),
+                                      .height = CLAY_SIZING_FIXED(20)},
         .hover_bg = COLOR_MANTLE,
         .sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(icon_width),
                                  .height = CLAY_SIZING_FIXED(bar_height)},
@@ -178,21 +184,29 @@ void title_bar(bool *exit_requested) {
     button_component((button_props){
         .id = CLAY_ID("btnMaximize"),
         .icon =
-            get_icon(IsWindowMaximized() ? ICON_MINIMIZE : ICON_MAXIMIZE, 24,
+            get_icon(IsWindowMaximized() ? ICON_MINIMIZE : ICON_MAXIMIZE, 20,
                      Clay_PointerOver(CLAY_ID("btnMaximize")) ? COLOR_OVERLAY_2
                                                               : COLOR_OVERLAY_0,
-                     1.8f, 2),
+                     2.0f, 4),
         .hover_bg = COLOR_MANTLE,
         .sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(icon_width),
                                  .height = CLAY_SIZING_FIXED(bar_height)},
+        .icon_sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(20),
+                                      .height = CLAY_SIZING_FIXED(20)},
         .ctx = &maximize_ctx});
 
     static button_click_ctx close_ctx = {on_close_click, NULL};
     close_ctx.user_data = exit_requested;
-    Texture2D *close_tex = get_icon(ICON_CLOSE, 24, COLOR_SUBTEXT_0, 0.0f, 2);
     button_component((button_props){
         .id = CLAY_ID("btnClose"),
-        .icon = close_tex,
+        .icon =
+            get_icon(ICON_CLOSE, 24,
+                     Clay_PointerOver(CLAY_ID("btnClose")) ? COLOR_MANTLE
+                                                           : COLOR_OVERLAY_0,
+                     16.0f, 4),
+
+        .icon_sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(24),
+                                      .height = CLAY_SIZING_FIXED(24)},
         .corner_radius = &(Clay_CornerRadius){.topRight = 12},
         .sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(icon_width),
                                  .height = CLAY_SIZING_FIXED(bar_height)},
@@ -208,14 +222,35 @@ void side_bar() {
         .border = {.color = COLOR_SURFACE_1, .width = {.right = 1}}}) {}
 }
 
-void main_content() {
+void main_content(app_data_t *data) {
 
   Clay_Sizing layout_expand = {
       .width = CLAY_SIZING_GROW(0),
       .height = CLAY_SIZING_GROW(0),
   };
   CLAY(CLAY_ID("mainContent"),
-       {.backgroundColor = COLOR_MANTLE, .layout = layout_expand}) {}
+       {.backgroundColor = COLOR_MANTLE, .layout = layout_expand}) {
+    const char *label = "";
+    switch (data->api_request.state) {
+    case API_IDLE:
+      label = "Not started";
+      break;
+    case API_IN_FLIGHT:
+      label = "Loading…";
+      break;
+    case API_DONE:
+      label = "Loaded";
+      break;
+    case API_FAILED:
+      label = "Error";
+      break;
+    };
+    Clay_String text = {
+        .length = (int32_t)strlen(label),
+        .chars = label,
+    };
+    CLAY_TEXT(text, text_defaults());
+  }
 }
 
 void create_ui(app_data_t *data, bool *exit_requested) {
@@ -239,7 +274,7 @@ void create_ui(app_data_t *data, bool *exit_requested) {
                    .layoutDirection = CLAY_LEFT_TO_RIGHT},
     }) {
       side_bar();
-      main_content();
+      main_content(data);
     }
   }
 }
