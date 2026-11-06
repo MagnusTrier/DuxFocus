@@ -4,7 +4,7 @@ AR_WIN     := x86_64-w64-mingw32-ar
 
 # Sources and objects
 SRC        := src/main.c src/win32_drag.c src/app.c src/fonts.c \
-              src/ui_components.c src/icons.c src/api.c
+              src/ui_components.c src/icons.c src/api.c src/hashmap.c
 OBJ        := $(SRC:src/%.c=build/%.o)
 DEP        := $(OBJ:.o=.d)
 

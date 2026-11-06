@@ -4,6 +4,7 @@
 #include "fonts.h"
 #include "icons.h"
 #include "raylib.h"
+#include <stdio.h>
 #include <string.h>
 
 static Clay_TextElementConfig text_defaults(void) {
@@ -149,16 +150,19 @@ void title_bar(bool *exit_requested) {
                    .layoutDirection = CLAY_LEFT_TO_RIGHT},
         .border = {.color = COLOR_SURFACE_1, .width = {.bottom = 1}}}) {
 
-    CLAY_AUTO_ID({.layout =
-                      {
-                          .sizing =
-                              {
-                                  .width = CLAY_SIZING_FIXED(40),
-                                  .height = CLAY_SIZING_FIXED(40),
-                              },
-                      },
-                  .image = {.imageData = get_icon(ICON_LOGO, 40, COLOR_BASE,
-                                                  0.0f, 2)}}) {}
+    Texture2D *logo = get_icon(ICON_LOGO, 40, COLOR_BASE, 0.0f, 2);
+    if (logo) {
+      CLAY_AUTO_ID({.layout =
+                        {
+                            .sizing =
+                                {
+                                    .width = CLAY_SIZING_FIXED(40),
+                                    .height = CLAY_SIZING_FIXED(40),
+                                },
+                        },
+                    .image = {.imageData = logo}}) {}
+    }
+
     CLAY(CLAY_ID("SmallSpacer"),
          {.layout = {.sizing = {.width = CLAY_SIZING_FIXED(8)}}}) {}
     CLAY_TEXT(CLAY_STRING(WINDOW_TITLE), text_defaults());
@@ -166,52 +170,59 @@ void title_bar(bool *exit_requested) {
          {.layout = {.sizing = {.width = CLAY_SIZING_GROW(0)}}}) {}
 
     static button_click_ctx minimize_ctx = {on_minimize_click, NULL};
-    button_component((button_props){
-        .id = CLAY_ID("btnMinimize"),
-        .icon =
-            get_icon(ICON_MINUS, 20,
-                     Clay_PointerOver(CLAY_ID("btnMinimize")) ? COLOR_OVERLAY_2
-                                                              : COLOR_OVERLAY_0,
-                     1.5f, 4),
-        .icon_sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(20),
-                                      .height = CLAY_SIZING_FIXED(20)},
-        .hover_bg = COLOR_MANTLE,
-        .sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(icon_width),
-                                 .height = CLAY_SIZING_FIXED(bar_height)},
-        .ctx = &minimize_ctx});
+    Texture2D *minimize_icon =
+        get_icon(ICON_MINUS, 20,
+                 Clay_PointerOver(CLAY_ID("btnMinimize")) ? COLOR_OVERLAY_2
+                                                          : COLOR_OVERLAY_0,
+                 1.5f, 4);
+    if (minimize_icon) {
+      button_component((button_props){
+          .id = CLAY_ID("btnMinimize"),
+          .icon = minimize_icon,
+          .icon_sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(20),
+                                        .height = CLAY_SIZING_FIXED(20)},
+          .hover_bg = COLOR_MANTLE,
+          .sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(icon_width),
+                                   .height = CLAY_SIZING_FIXED(bar_height)},
+          .ctx = &minimize_ctx});
+    }
 
     static button_click_ctx maximize_ctx = {on_maximize_click, NULL};
-    button_component((button_props){
-        .id = CLAY_ID("btnMaximize"),
-        .icon =
-            get_icon(IsWindowMaximized() ? ICON_MINIMIZE : ICON_MAXIMIZE, 20,
-                     Clay_PointerOver(CLAY_ID("btnMaximize")) ? COLOR_OVERLAY_2
-                                                              : COLOR_OVERLAY_0,
-                     2.0f, 4),
-        .hover_bg = COLOR_MANTLE,
-        .sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(icon_width),
-                                 .height = CLAY_SIZING_FIXED(bar_height)},
-        .icon_sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(20),
-                                      .height = CLAY_SIZING_FIXED(20)},
-        .ctx = &maximize_ctx});
+    Texture2D *maximize_icon =
+        get_icon(IsWindowMaximized() ? ICON_MINIMIZE : ICON_MAXIMIZE, 20,
+                 Clay_PointerOver(CLAY_ID("btnMaximize")) ? COLOR_OVERLAY_2
+                                                          : COLOR_OVERLAY_0,
+                 2.0f, 4);
+    if (maximize_icon) {
+      button_component((button_props){
+          .id = CLAY_ID("btnMaximize"),
+          .icon = maximize_icon,
+          .hover_bg = COLOR_MANTLE,
+          .sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(icon_width),
+                                   .height = CLAY_SIZING_FIXED(bar_height)},
+          .icon_sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(20),
+                                        .height = CLAY_SIZING_FIXED(20)},
+          .ctx = &maximize_ctx});
+    }
 
     static button_click_ctx close_ctx = {on_close_click, NULL};
     close_ctx.user_data = exit_requested;
-    button_component((button_props){
-        .id = CLAY_ID("btnClose"),
-        .icon =
-            get_icon(ICON_CLOSE, 24,
-                     Clay_PointerOver(CLAY_ID("btnClose")) ? COLOR_MANTLE
-                                                           : COLOR_OVERLAY_0,
-                     16.0f, 4),
-
-        .icon_sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(24),
-                                      .height = CLAY_SIZING_FIXED(24)},
-        .corner_radius = &(Clay_CornerRadius){.topRight = 12},
-        .sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(icon_width),
-                                 .height = CLAY_SIZING_FIXED(bar_height)},
-        .hover_bg = COLOR_RED,
-        .ctx = &close_ctx});
+    Texture2D *close_icon = get_icon(
+        ICON_CLOSE, 24,
+        Clay_PointerOver(CLAY_ID("btnClose")) ? COLOR_MANTLE : COLOR_OVERLAY_0,
+        16.0f, 4);
+    if (close_icon) {
+      button_component((button_props){
+          .id = CLAY_ID("btnClose"),
+          .icon = close_icon,
+          .icon_sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(24),
+                                        .height = CLAY_SIZING_FIXED(24)},
+          .corner_radius = &(Clay_CornerRadius){.topRight = 12},
+          .sizing = &(Clay_Sizing){.width = CLAY_SIZING_FIXED(icon_width),
+                                   .height = CLAY_SIZING_FIXED(bar_height)},
+          .hover_bg = COLOR_RED,
+          .ctx = &close_ctx});
+    }
   }
 }
 
