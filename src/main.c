@@ -86,9 +86,6 @@ int main(void) {
   InitWin32Drag();
 #endif
 
-  Font fonts[TOTAL_FONTS] = {0};
-  load_fonts(fonts);
-
   uint64_t clay_required_memory = Clay_MinMemorySize();
   Clay_Arena clay_memory_top = Clay_CreateArenaWithCapacityAndMemory(
       clay_required_memory, malloc(clay_required_memory));
@@ -103,7 +100,7 @@ int main(void) {
   app_data_t data_top = {.frameArena = {.memory = (intptr_t)arena_mem}};
 
   api_request_start(&data_top.api_request, "https://httpbin.org/json");
-  Clay_SetMeasureTextFunction(Raylib_MeasureText, fonts);
+  Clay_SetMeasureTextFunction(Raylib_MeasureText, fonts.values);
 
   bool exit_requested = false;
 
@@ -113,7 +110,7 @@ int main(void) {
         create_layout(clay_context_top, &data_top, &exit_requested);
     BeginDrawing();
     ClearBackground(BLANK);
-    Clay_Raylib_Render(render_commands_top, fonts);
+    Clay_Raylib_Render(render_commands_top, (Font *)fonts.values);
     EndDrawing();
   }
   icons_system_unload();

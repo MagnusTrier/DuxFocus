@@ -20,9 +20,7 @@ static bool hm_rehash(hashmap_t *m, size_t new_cap) {
   }
 
   size_t old_cap = m->capacity;
-  uint8_t *ok = m->keys;
-  uint8_t *ov = m->values;
-  uint8_t *os = m->state;
+  uint8_t *ok = m->keys, *ov = m->values, *os = m->state;
 
   m->keys = keys;
   m->values = values;

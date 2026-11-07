@@ -1,27 +1,111 @@
 #include "fonts.h"
+#include "hashmap.h"
 #include "raylib.h"
+#include <stdio.h>
+#include <stdlib.h>
 
-static const int FONT_SIZES[SIZE_SIZE_COUNT] = {12, 16, 20, 24, 32};
-static const char *WEIGHT_FILES[WEIGHT_COUNT] = {
-    "resources/fonts/JetBrainsMonoNerdFont-Regular.ttf",
-    "resources/fonts/JetBrainsMonoNerdFont-Medium.ttf",
-    "resources/fonts/JetBrainsMonoNerdFont-Bold.ttf",
-    "resources/fonts/JetBrainsMonoNerdFont-ExtraBold.ttf"};
+static const char *FONT_FAMILIES[FAMILY_COUNT] = {[FAMILY_JETBRAINS] =
+                                                      "JetBrainsMonoNerdFont"};
 
-void load_fonts(Font fonts_out[TOTAL_FONTS]) {
-  for (int s = 0; s < SIZE_SIZE_COUNT; ++s) {
-    for (int w = 0; w < WEIGHT_COUNT; ++w) {
-      int font_id = get_font_id((font_size_t)s, (font_weight_t)w);
-      int px_size = FONT_SIZES[s];
+static const char *FONT_WEIGHTS[WEIGHT_COUNT] = {
+    [WEIGHT_BOLD] = "Bold",
+    [WEIGHT_EXTRA_BOLD] = "ExtraBold",
+    [WEIGHT_MEDIUM] = "Medium",
+    [WEIGHT_REGULAR] = "Regular",
+};
 
-      fonts_out[font_id] = LoadFontEx(WEIGHT_FILES[w], px_size, NULL, 0);
-      SetTextureFilter(fonts_out[font_id].texture, TEXTURE_FILTER_BILINEAR);
-    }
+static Font load_font(font_family_t family, font_weight_t weight, int size) {
+  char path[256];
+  snprintf(path, sizeof(path), "resources/fonts/%s-%s.ttf",
+           FONT_FAMILIES[family], FONT_WEIGHTS[weight]);
+  Font f = LoadFontEx(path, size, NULL, 0);
+  SetTextureFilter(f.texture, TEXTURE_FILTER_BILINEAR);
+  return f;
+}
+
+typedef struct {
+  font_family_t family;
+  font_weight_t weight;
+  int size;
+} font_key_t;
+
+typedef struct {
+  Font *f;
+} font_value_t;
+
+static hashmap_t fonts;
+
+static uint32_t font_key_hash(const void *kp, void *user) {
+  (void)user;
+  const font_key_t *k = kp;
+  uint32_t h = 2166136261u;
+  h = (h ^ (uint32_t)k->family) * 16777619u;
+  h = (h ^ (uint32_t)k->size) * 16777619u;
+  h = (h ^ (uint32_t)k->weight) * 16777619u;
+  return h;
+}
+
+static bool font_key_eq(const void *a, const void *b, void *user) {
+  (void)user;
+  const font_key_t *x = a;
+  const font_key_t *y = b;
+
+  if (x->family != y->family || x->size != y->size || x->weight != y->weight) {
+    return false;
+  }
+
+  return true;
+}
+
+static void unload_value(const void *k, void *v, void *user) {
+  (void)k;
+  (void)user;
+  font_value_t *fv = v;
+  if (fv->f) {
+    UnloadFont(*fv->f);
   }
 }
 
-void unload_fonts(Font fonts_out[TOTAL_FONTS]) {
-  for (int i = 0; i < TOTAL_FONTS; ++i) {
-    UnloadFont(fonts_out[i]);
+Font *get_font(font_family_t family, font_weight_t weight, int size) {
+  if (family < 0 || family >= FAMILY_COUNT || weight < 0 ||
+      weight >= WEIGHT_COUNT) {
+    return NULL;
   }
+
+  if (!fonts.capacity) {
+    hashmap_init(&fonts, sizeof(font_key_t), sizeof(font_value_t),
+                 font_key_hash, font_key_eq, NULL);
+  }
+
+  font_key_t key = {.family = family, .weight = weight, .size = size};
+
+  font_value_t *hit = hashmap_get(&fonts, &key);
+  if (hit) {
+    return hit->f;
+  }
+
+  Font *f = malloc(sizeof *f);
+  if (!f) {
+    return NULL;
+  }
+
+  *f = load_font(family, weight, size);
+  if (!f) {
+    free(f);
+    return NULL;
+  }
+
+  font_value_t val = {.f = f};
+  font_value_t *slot = hashmap_put(&fonts, &key, &val, NULL);
+  if (!slot) {
+    UnloadFont(*f);
+    return NULL;
+  }
+
+  return f;
+}
+
+void fonts_system_unload(void) {
+  hashmap_foreach(&fonts, unload_value, NULL);
+  hashmap_destroy(&fonts);
 }
